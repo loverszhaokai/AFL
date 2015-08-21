@@ -23,11 +23,14 @@
 #include "../types.h"
 
 #include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+#include <assert.h>
+
 #include <sys/mman.h>
 #include <sys/shm.h>
 #include <sys/wait.h>
-#include <unistd.h>
-#include <assert.h>
+#include <sys/types.h>
 
 
 /* Globals needed by the injected instrumentation. The __afl_area_initial region
