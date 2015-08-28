@@ -43,11 +43,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-static u8*  as_path;                /* Path to the AFL 'as' wrapper      */
-static u8** cc_params;              /* Parameters passed to the real CC  */
-static u32  cc_par_cnt = 1;         /* Param count, including argv0      */
-static u8   be_quiet,               /* Quiet mode                        */
-            clang_mode;             /* Invoked as afl-clang*?            */
+static u8*  as_path;                /* Path to the AFL 'as' wrapper        */
+static u8*  afl_gcc_rt_path;        /* Path to the AFL gcc runtime object  */
+static u8** cc_params;              /* Parameters passed to the real CC    */
+static u32  cc_par_cnt = 1;         /* Param count, including argv0        */
+static u8   be_quiet,               /* Quiet mode                          */
+            clang_mode;             /* Invoked as afl-clang*?              */
 
 
 /* Try to find our "fake" GNU assembler in AFL_PATH or at the location derived
@@ -102,6 +103,56 @@ static void find_as(u8* argv0) {
 
   FATAL("Unable to find AFL wrapper binary for 'as'. Please set AFL_PATH");
  
+}
+
+static void find_gcc_rt(u8* argv0) {
+
+  u8 *afl_path = getenv("AFL_PATH");
+  u8 *slash, *tmp;
+
+  if (afl_path) {
+
+    tmp = alloc_printf("%s/afl-gcc-rt.o", afl_path);
+
+    if (!access(tmp, R_OK)) {
+      afl_gcc_rt_path = afl_path;
+      ck_free(tmp);
+      return;
+    }
+
+    ck_free(tmp);
+  }
+
+  slash = strrchr(argv0, '/');
+
+  if (slash) {
+
+    u8 *dir;
+
+    *slash = 0;
+    dir = ck_strdup(argv0);
+    *slash = '/';
+
+    tmp = alloc_printf("%s/afl-gcc-rt.o", dir);
+
+    if (!access(tmp, R_OK)) {
+      afl_gcc_rt_path = dir;
+      ck_free(tmp);
+      return;
+    }
+
+    ck_free(tmp);
+    ck_free(dir);
+
+  }
+
+  if (!access(AFL_PATH "/afl-gcc-rt.o", R_OK)) {
+    afl_gcc_rt_path = AFL_PATH;
+    return;
+  }
+
+  FATAL("Unable to find AFL gcc runtime object for 'ld'. Please set AFL_PATH");
+
 }
 
 
@@ -265,6 +316,8 @@ static void edit_params(u32 argc, char** argv) {
 
   }
 
+  cc_params[cc_par_cnt++] = alloc_printf("%s/afl-gcc-rt.o", afl_gcc_rt_path);
+
   cc_params[cc_par_cnt] = NULL;
 
 }
@@ -300,6 +353,7 @@ int main(int argc, char** argv) {
 
 
   find_as(argv[0]);
+  find_gcc_rt(argv[0]);
 
   edit_params(argc, argv);
 

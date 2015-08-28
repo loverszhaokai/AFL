@@ -1869,8 +1869,8 @@ static void init_forkserver(char** argv) {
 
     setsid();
 
-    dup2(dev_null_fd, 1);
-    dup2(dev_null_fd, 2);
+    // dup2(dev_null_fd, 1);
+    // dup2(dev_null_fd, 2);
 
     if (out_file) {
 
@@ -3142,6 +3142,8 @@ static void find_timeout(void) {
 /* Update stats file for unattended monitoring. */
 
 static void write_stats_file(double bitmap_cvg, double eps) {
+
+return;
 
   static double last_bcvg, last_eps;
 

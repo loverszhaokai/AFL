@@ -1,3 +1,7 @@
+GPATH
+GRTAGS
+GTAGS
+
 afl-as
 afl-clang
 afl-clang++
@@ -12,6 +16,6 @@ afl-llvm-rt.o
 afl-showmap
 afl-tmin
 as
-GPATH
-GRTAGS
-GTAGS
+
+*.o
+*.out
