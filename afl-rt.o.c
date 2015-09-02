@@ -19,8 +19,8 @@
 
 */
 
-#include "../config.h"
-#include "../types.h"
+#include "config.h"
+#include "types.h"
 
 #include <stdlib.h>
 #include <signal.h>

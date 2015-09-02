@@ -22,7 +22,7 @@ HELPER_PATH = $(PREFIX)/lib/afl
 DOC_PATH    = $(PREFIX)/share/doc/afl
 MISC_PATH   = $(PREFIX)/share/afl
 
-PROGS       = afl-gcc afl-as afl-fuzz afl-showmap afl-tmin afl-gotcpu afl-rt.o
+PROGS       = afl-gcc afl-as
 
 CFLAGS     ?= -O3 -funroll-loops
 CFLAGS     += -Wall -D_FORTIFY_SOURCE=2 -g -Wno-pointer-sign \
@@ -39,23 +39,9 @@ else
   TEST_CC   = afl-clang
 endif
 
-# Make sure whether can generate -m32 afl-rt.o
-M32_RET = $(shell echo 'main() { }' | $(CC) -w -m32 -c -x c - -o .test.o;\
-           rm -f .test.o; echo $$?)
-ifeq ($(M32_RET),0)
-  PROGS += afl-rt-m32.o
-endif
+COMM_HDR    = ../alloc-inl.h ../config.h ../debug.h ../types.h
 
-# Make sure whether can generate -m64 afl-rt.o
-M64_RET = $(shell echo 'main() { }' | $(CC) -w -m64 -c -x c - -o .test.o;\
-           rm -f .test.o; echo $$?)
-ifeq ($(M64_RET),0)
-  PROGS += afl-rt-m64.o
-endif
-
-COMM_HDR    = alloc-inl.h config.h debug.h types.h
-
-all: test_x86 $(PROGS) test_build all_done
+all: test_x86 $(PROGS) all_done
 
 ifndef AFL_NOX86
 
@@ -72,50 +58,29 @@ test_x86:
 
 endif
 
-afl-gcc: afl-gcc.c $(COMM_HDR) | test_x86
-	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
+afl-gcc: afl-gcc.c ../common.c $(COMM_HDR) | test_x86
+	$(CC) $(CFLAGS) $@.c ../common.c -o $@ $(LDFLAGS)
 	set -e; for i in afl-g++ afl-clang afl-clang++; do ln -sf afl-gcc $$i; done
 
 afl-as: afl-as.c afl-as.h $(COMM_HDR) | test_x86
 	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS) 
 	ln -sf afl-as as
 
-afl-fuzz: afl-fuzz.c $(COMM_HDR) | test_x86
-	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
-
-afl-showmap: afl-showmap.c $(COMM_HDR) | test_x86
-	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
-
-afl-tmin: afl-tmin.c $(COMM_HDR) | test_x86
-	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
-
-afl-gotcpu: afl-gotcpu.c $(COMM_HDR) | test_x86
-	$(CC) $(CFLAGS) $@.c -o $@ $(LDFLAGS)
-
-afl-rt.o: afl-rt.o.c | test_x86
-	$(CC) $(CFLAGS) -c $< -o $@
-
-afl-rt-m32.o: afl-rt.o.c | test_x86
-	$(CC) $(CFLAGS) -m32 -c $< -o $@
-
-afl-rt-m64.o: afl-rt.o.c | test_x86
-	$(CC) $(CFLAGS) -m64 -c $< -o $@
-
-
 ifndef AFL_NOX86
 
-test_build: afl-gcc afl-as afl-showmap
+test_build: afl-gcc afl-as
 	@echo "[*] Testing the CC wrapper and instrumentation output..."
-	unset AFL_USE_ASAN AFL_USE_MSAN; AFL_QUIET=1 AFL_INST_RATIO=100 AFL_PATH=. ./$(TEST_CC) $(CFLAGS) test-instr.c -o test-instr $(LDFLAGS)
-	echo 0 | ./afl-showmap -m none -q -o .test-instr0 ./test-instr
-	echo 1 | ./afl-showmap -m none -q -o .test-instr1 ./test-instr
+	cp ../afl-rt*.o ./
+	unset AFL_USE_ASAN AFL_USE_MSAN; AFL_QUIET=1 AFL_INST_RATIO=100 AFL_PATH=.. ./$(TEST_CC) $(CFLAGS) ../test-instr.c -o test-instr $(LDFLAGS)
+	echo 0 | ../afl-showmap -m none -q -o .test-instr0 ./test-instr
+	echo 1 | ../afl-showmap -m none -q -o .test-instr1 ./test-instr
 	@rm -f test-instr
 	@cmp -s .test-instr0 .test-instr1; DR="$$?"; rm -f .test-instr0 .test-instr1; if [ "$$DR" = "0" ]; then echo; echo "Oops, the instrumentation does not seem to be behaving correctly!"; echo; echo "Please ping <lcamtuf@google.com> to troubleshoot the issue."; echo; exit 1; fi
 	@echo "[+] All right, the instrumentation seems to be working!"
 
 else
 
-test_build: afl-gcc afl-as afl-showmap
+test_build: afl-gcc afl-as
 	@echo "[!] Note: skipping build tests (you may need to use LLVM or QEMU mode)."
 
 endif
@@ -130,12 +95,11 @@ all_done: test_build
 clean:
 	rm -f $(PROGS) as afl-g++ afl-clang afl-clang++ *.o *~ a.out core core.[1-9][0-9]* *.stackdump test .test test-instr .test-instr0 .test-instr1 qemu_mode/qemu-2.3.0.tar.bz2 afl-qemu-trace
 	rm -rf out_dir qemu_mode/qemu-2.3.0
-	$(MAKE) -C llvm_mode clean
 
 install: all
 	mkdir -p -m 755 $${DESTDIR}$(BIN_PATH) $${DESTDIR}$(HELPER_PATH) $${DESTDIR}$(DOC_PATH) $${DESTDIR}$(MISC_PATH)
 	rm -f $${DESTDIR}$(BIN_PATH)/afl-plot.sh
-	install -m 755 afl-gcc afl-fuzz afl-showmap afl-plot afl-tmin afl-cmin afl-gotcpu afl-whatsup $${DESTDIR}$(BIN_PATH)
+	install -m 755 afl-gcc afl-fuzz ../afl-showmap afl-plot afl-tmin afl-cmin afl-gotcpu afl-whatsup $${DESTDIR}$(BIN_PATH)
 	if [ -f afl-qemu-trace ]; then install -m 755 afl-qemu-trace $${DESTDIR}$(BIN_PATH); fi
 	if [ -f afl-clang-fast -a -f afl-llvm-pass.so -a -f afl-llvm-rt.o ]; then set -e; install -m 755 afl-clang-fast $${DESTDIR}$(BIN_PATH); ln -sf afl-clang-fast $${DESTDIR}$(BIN_PATH)/afl-clang-fast++; install -m 755 afl-llvm-pass.so afl-llvm-rt.o $${DESTDIR}$(HELPER_PATH); fi
 	set -e; for i in afl-g++ afl-clang afl-clang++; do ln -sf afl-gcc $${DESTDIR}$(BIN_PATH)/$$i; done

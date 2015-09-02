@@ -55,7 +55,7 @@ CXX          = clang++
 
 endif
 
-PROGS        = ../afl-clang-fast ../afl-llvm-pass.so ../afl-llvm-rt.o
+PROGS        = ../afl-clang-fast ../afl-llvm-pass.so
 
 all: test_deps $(PROGS) test_build all_done
 
@@ -68,15 +68,12 @@ test_deps:
 	@test -f ../afl-showmap || ( echo "[-] Oops, can't find '../afl-showmap'. Be sure to compile AFL first."; exit 1 )
 	@echo "[+] All set and ready to build."
 
-../afl-clang-fast: afl-clang-fast.c | test_deps
-	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS)
+../afl-clang-fast: afl-clang-fast.c ../common.c | test_deps
+	$(CC) $(CFLAGS) $< ../common.c -o $@ $(LDFLAGS)
 	ln -sf afl-clang-fast ../afl-clang-fast++
 
 ../afl-llvm-pass.so: afl-llvm-pass.so.cc | test_deps
 	$(CXX) $(CLANG_CFL) -shared $< -o $@ $(CLANG_LFL)
-
-../afl-llvm-rt.o: afl-llvm-rt.o.c | test_deps
-	$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
 test_build: $(PROGS)
 	@echo "[*] Testing the CC wrapper and instrumentation output..."

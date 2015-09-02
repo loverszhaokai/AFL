@@ -33,74 +33,23 @@
 #include <stdlib.h>
 #include <string.h>
 
-static u8*  obj_path;               /* Path to runtime libraries         */
 static u8** cc_params;              /* Parameters passed to the real CC  */
 static u32  cc_par_cnt = 1;         /* Param count, including argv0      */
 
 
-/* Try to find the runtime libraries. If that fails, abort. */
-
-static void find_obj(u8* argv0) {
-
-  u8 *afl_path = getenv("AFL_PATH");
-  u8 *slash, *tmp;
-
-  if (afl_path) {
-
-    tmp = alloc_printf("%s/afl-llvm-rt.o", afl_path);
-
-    if (!access(tmp, R_OK)) {
-      obj_path = afl_path;
-      ck_free(tmp);
-      return;
-    }
-
-    ck_free(tmp);
-
-  }
-
-  slash = strrchr(argv0, '/');
-
-  if (slash) {
-
-    u8 *dir;
-
-    *slash = 0;
-    dir = ck_strdup(argv0);
-    *slash = '/';
-
-    tmp = alloc_printf("%s/afl-llvm-rt.o", dir);
-
-    if (!access(tmp, R_OK)) {
-      obj_path = dir;
-      ck_free(tmp);
-      return;
-    }
-
-    ck_free(tmp);
-    ck_free(dir);
-
-  }
-
-  if (!access(AFL_PATH "/afl-llvm-rt.o", R_OK)) {
-    obj_path = AFL_PATH;
-    return;
-  }
-
-  FATAL("Unable to find 'afl-llvm-rt.o' or 'afl-llvm-pass.so'. Please set AFL_PATH");
- 
-}
-
+void find_obj(u8* argv0, u8 m32_set, u8 m64_set, u8 **obj_path, u8 **obj_name);
 
 /* Copy argv to cc_params, making the necessary edits. */
 
 static void edit_params(u32 argc, char** argv) {
 
   u8 fortify_set = 0, asan_set = 0, x_set = 0, maybe_linking = 1;
-  u8 *name;
+  u8 m32_set = 0, m64_set = 0, pass_so_index = 0;
+  u8 *name, *argv0;
 
   cc_params = ck_alloc((argc + 64) * sizeof(u8*));
 
+  argv0 = argv[0];
   name = strrchr(argv[0], '/');
   if (!name) name = argv[0]; else name++;
 
@@ -115,15 +64,15 @@ static void edit_params(u32 argc, char** argv) {
   cc_params[cc_par_cnt++] = "-Xclang";
   cc_params[cc_par_cnt++] = "-load";
   cc_params[cc_par_cnt++] = "-Xclang";
-  cc_params[cc_par_cnt++] = alloc_printf("%s/afl-llvm-pass.so", obj_path);
+  pass_so_index = cc_par_cnt++;
   cc_params[cc_par_cnt++] = "-Qunused-arguments";
 
   while (--argc) {
     u8* cur = *(++argv);
 
-#if defined(__x86_64__)
-    if (!strcmp(cur, "-m32")) FATAL("-m32 is not supported");
-#endif
+    if (!strcmp(cur, "-m32")) m32_set = 1;
+
+    if (!strcmp(cur, "-m64")) m64_set = 1;
 
     if (!strcmp(cur, "-x")) x_set = 1;
 
@@ -186,6 +135,11 @@ static void edit_params(u32 argc, char** argv) {
     "do { static char _A[] __attribute__((used)) = \"" DEFER_SIG "\"; "
     "void __afl_manual_init(void); __afl_manual_init(); } while (0)";
 
+  u8 *obj_path, *obj_name;
+  find_obj(argv0, m32_set, m64_set, &obj_path, &obj_name);
+
+  cc_params[pass_so_index] = alloc_printf("%s/afl-llvm-pass.so", obj_path);
+
   if (maybe_linking) {
 
     if (x_set) {
@@ -193,7 +147,7 @@ static void edit_params(u32 argc, char** argv) {
       cc_params[cc_par_cnt++] = "none";
     }
 
-    cc_params[cc_par_cnt++] = alloc_printf("%s/afl-llvm-rt.o", obj_path);
+    cc_params[cc_par_cnt++] = alloc_printf("%s/%s", obj_path, obj_name);
 
   }
 
@@ -232,9 +186,6 @@ int main(int argc, char** argv) {
     exit(1);
 
   }
-
-
-  find_obj(argv[0]);
 
   edit_params(argc, argv);
 
