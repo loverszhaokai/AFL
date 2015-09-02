@@ -41,16 +41,21 @@ endif
 
 # Make sure whether can generate -m32 afl-rt.o
 M32_RET = $(shell echo '\#include <stdio.h> int main() { return 0; }' | \
-           $(CC) -w -m32 -c -x c - -o .test.o; rm -f .test.o; echo $$?)
+           $(CC) -w -m32 -c -x c - -o .test.o; echo $$?)
 ifeq ($(M32_RET),0)
   PROGS += afl-rt-m32.o
 endif
 
 # Make sure whether can generate -m64 afl-rt.o
 M64_RET = $(shell echo '\#include <stdio.h> int main() { return 0; }' | \
-           $(CC) -w -m64 -c -x c - -o .test.o; rm -f .test.o; echo $$?)
+           $(CC) -w -m64 -c -x c - -o .test.o; echo $$?)
 ifeq ($(M64_RET),0)
   PROGS += afl-rt-m64.o
+endif
+
+# Remove the generated file
+REMOVE_RET = $(shell rm -f .test.o)
+ifeq ($(REMOVE_RET), 0)
 endif
 
 COMM_HDR    = alloc-inl.h config.h debug.h types.h
